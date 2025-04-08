@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DragonKey</title>
+  <style>
+    
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 50px;
+      background-color: black;
+    }
+    #output {
+      margin-top: 20px;
+      font-size: 1.2rem;
+      color: #333;
+    }
+    #readButton {
+  display: inline-block;
+  width: 80%;
+  max-width: 400px;
+  padding: 24px 0;
+  font-size: 1.5rem;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1920aa, #45A049);
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+    button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.3);
+    }
+
+    button:active {
+      transform: scale(0.98);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .logo {
+  display: block;
+  margin: 0 auto 20px auto; /* centers it and adds bottom spacing */
+  max-width: 130px;         /* control size */
+  height: auto;
+}
+    select {
+      padding: 10px 16px;
+      font-size: 1rem;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      background-color: #f9f9f9;
+      color: #333;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-image: url('data:image/svg+xml;utf8,<svg fill="%23333" height="20" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 16px;
+      cursor: pointer;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <img src="logo.png" alt="DragonKey Logo" class="logo" />
+  <h1 style="margin-bottom: 20px; font-family: Luminari, fantasy; color: white;">DragonKey</h1>
+  <select id="eventSelect">
+    <option value="Movie Night">Movie Night</option>
+    <option value="Prom">Prom</option>
+    <option value="Spring Fest">Spring Fest</option>
+    <option value="Band Field Trip">Band Field Trip</option>
+  </select>
+  <button id="readButton" style="margin-top: 15px;" >Read NFC Tag</button>
+  <div id="output" style="color:beige;">Tap an NFC tag to read...</div>
+
+  <audio id="sound_error" src="error-126627.mp3" preload="auto"></audio>
+  <audio id="sound_approved" src="ding-101492.mp3" preload="auto"></audio>
+
+  <script>
+    const readButton = document.getElementById('readButton');
+    const output = document.getElementById('output');
+
+    const getSelectedEvent = () => document.getElementById('eventSelect').value;
+    const BACKEND_URL = "https://10.240.161.141:3000/verify"; // replace with your IP
+
+    readButton.addEventListener('click', async () => {
+      if ('NDEFReader' in window) {
+        try {
+          const ndef = new NDEFReader();
+          await ndef.scan();
+          output.textContent = "Waiting for NFC tag...";
+
+          ndef.onreading = async (event) => {
+            const { message } = event;
+            for (const record of message.records) {
+              if (record.recordType === "text") {
+                const textDecoder = new TextDecoder(record.encoding || "utf-8");
+                const text = textDecoder.decode(record.data);
+                output.textContent = "Tag content: " + text;
+
+                const numberMatch = text.match(/number:\s*(\d+)/i);
+                const student_number = numberMatch ? numberMatch[1] : null;
+                console.log("Parsed student_number:", student_number);
+                if (!student_number) {
+                  output.textContent = "❌ Could not read student number from tag.";
+                  document.body.style.backgroundColor = "red";
+                  sound_error.play();
+                  return;
+                }
+
+                
+
+                const response = await fetch(BACKEND_URL, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ student_number, event_name: getSelectedEvent() })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                  output.textContent = `✅ Approved: ${data.name}`;
+                  document.body.style.backgroundColor = "lightgreen";
+                  sound_approved.play();
+                  setTimeout(() => {
+                    document.body.style.backgroundColor = "black";
+                  }, 4000);
+                } else {
+                  output.textContent = `❌ Denied: ${data.name ? data.name + ' – ' : ''}${data.message}`;
+                  document.body.style.backgroundColor = "red";
+                  sound_error.play();
+                  setTimeout(() => {
+                    document.body.style.backgroundColor = "black";
+                  }, 4000);
+                }
+              }
+            }
+          };
+        } catch (error) {
+          output.textContent = "Error: " + error.message;
+          document.body.style.backgroundColor = "red";
+        }
+      } else {
+        output.textContent = "Web NFC is not supported on this device/browser.";
+      }
+    });
+  </script>
+
+</body>
+</html>

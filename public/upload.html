@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NFC Reader</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 50px;
+    }
+    #output {
+      margin-top: 20px;
+      font-size: 1.2rem;
+      color: #333;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 8px;
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>NFC Tag Reader</h1>
+  <button id="readButton">Read NFC Tag</button>
+  <div id="output">Tap an NFC tag to read...</div>
+
+  <script>
+    const readButton = document.getElementById('readButton');
+    const output = document.getElementById('output');
+
+    const EVENT_NAME = "Movie Night"; // 🔁 change for other events
+    const BACKEND_URL = "https://10.240.161.141:3000/verify"; // replace with your IP
+
+    readButton.addEventListener('click', async () => {
+      if ('NDEFReader' in window) {
+        try {
+          const ndef = new NDEFReader();
+          await ndef.scan();
+          output.textContent = "Waiting for NFC tag...";
+
+          ndef.onreading = async (event) => {
+            const { message } = event;
+            for (const record of message.records) {
+              if (record.recordType === "text") {
+                const textDecoder = new TextDecoder(record.encoding || "utf-8");
+                const text = textDecoder.decode(record.data);
+                output.textContent = "Tag content: " + text;
+
+                const numberMatch = text.match(/number:\s*(\d+)/i);
+                const student_number = numberMatch ? numberMatch[1] : null;
+
+                if (!student_number) {
+                  output.textContent = "❌ Could not read student number from tag.";
+                  document.body.style.backgroundColor = "red";
+                  return;
+                }
+
+                const response = await fetch(BACKEND_URL, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ student_number, event_name: EVENT_NAME })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                  output.textContent = `✅ Approved: ${data.name}`;
+                  document.body.style.backgroundColor = "lightgreen";
+                } else {
+                  output.textContent = `❌ Denied: ${data.message}`;
+                  document.body.style.backgroundColor = "red";
+                }
+              }
+            }
+          };
+        } catch (error) {
+          output.textContent = "Error: " + error.message;
+          document.body.style.backgroundColor = "red";
+        }
+      } else {
+        output.textContent = "Web NFC is not supported on this device/browser.";
+      }
+    });
+  </script>
+
+</body>
+</html>
